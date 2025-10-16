@@ -4,15 +4,18 @@ A powerful CLI tool that scans your project directory and generates comprehensiv
 
 ## Features
 
-- Recursively scans directories for code files
+- Recursively scans directories for code files from any subdirectory
 - Supports 30+ programming languages and file types
 - Generates a clean, formatted Markdown document with:
-  - Project structure tree view (when run from project root)
+  - Project structure tree view from current directory
   - File summary table with sizes and types
   - Full file contents with syntax-highlighted code blocks
 - Automatically detects project root (via `.git` or `package.json`)
 - Ignores common build directories and dependencies (node_modules, dist, etc.)
 - Handles large files gracefully (skips files over 1MB)
+- Cross-platform path normalization (uses forward slashes)
+- Robust error handling with detailed error messages
+- Smart Markdown escaping for special characters in file paths
 
 ## Installation
 
@@ -21,7 +24,7 @@ A powerful CLI tool that scans your project directory and generates comprehensiv
 Install globally to use `codemap` command anywhere:
 
 ```bash
-npm install -g codemap
+npm install -g @mehti/codemap
 ```
 
 ### Using npx (No Installation Required)
@@ -29,7 +32,7 @@ npm install -g codemap
 Run directly without installation:
 
 ```bash
-npx codemap
+npx @mehti/codemap
 ```
 
 ### Local Development
@@ -54,7 +57,7 @@ codemap
 This will:
 1. Scan all code files in the current directory and subdirectories
 2. Generate a `CODEMAP.md` file in the current directory
-3. Include a project tree structure if running from project root
+3. Include a project tree structure starting from the current directory
 
 ### Example Output
 
@@ -118,7 +121,7 @@ The generated `CODEMAP.md` includes:
 1. **Header** - Project name and generation timestamp
 2. **Table of Contents** - Quick navigation links
 3. **Project Overview** - Directory path and root detection status
-4. **Project Structure** - ASCII tree view (if in project root)
+4. **Project Structure** - ASCII tree view from current directory
 5. **File Summary** - Table with all files, types, and sizes
 6. **File Contents** - Full content of each file with syntax highlighting
 
@@ -154,7 +157,12 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 
 ### Permission Errors
 
-If you encounter permission errors on Unix systems, make sure the CLI file is executable:
+If you encounter permission errors, CodeMap will display a clear error message:
+- `Permission denied: Cannot read file` - File access is restricted
+- `Permission denied: Cannot access directory` - Directory access is restricted
+- `Permission denied: Cannot write to the current directory` - Output location is read-only
+
+On Unix systems, you may need to make the CLI file executable:
 
 ```bash
 chmod +x cli.js
@@ -170,6 +178,10 @@ If CodeMap reports no files found:
 ### Large Files Skipped
 
 Files larger than 1MB are automatically skipped to prevent memory issues. The markdown will show a placeholder message for these files.
+
+### Symbolic Links
+
+Symbolic links are automatically skipped to avoid circular references and infinite loops.
 
 ## Credits
 

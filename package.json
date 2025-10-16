@@ -1,5 +1,5 @@
 {
-  "name": "codemap",
+  "name": "@mehti/codemap",
   "version": "1.0.1",
   "description": "A CLI tool to scan code files and generate a comprehensive Markdown documentation",
   "main": "index.js",
