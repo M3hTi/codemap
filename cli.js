@@ -42,12 +42,9 @@ async function main() {
 
     console.log(`✅ Found ${scannedFiles.length} code file(s)\n`);
 
-    // Build project tree if in project root
-    let projectTree = null;
-    if (isRoot) {
-      console.log('🌳 Building project tree...');
-      projectTree = buildTree(currentDir, scannedFiles);
-    }
+    // Build project tree from current directory
+    console.log('🌳 Building project tree...');
+    const projectTree = buildTree(currentDir, scannedFiles);
 
     // Generate markdown content
     console.log('📝 Generating markdown documentation...');
