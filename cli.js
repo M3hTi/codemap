@@ -59,13 +59,29 @@ async function main() {
     const outputPath = path.join(currentDir, 'CODEMAP.md');
 
     // Write markdown file
-    fs.writeFileSync(outputPath, markdownContent, 'utf8');
-
-    console.log(`\n✨ Success! Documentation generated at:`);
-    console.log(`   ${outputPath}\n`);
+    try {
+      fs.writeFileSync(outputPath, markdownContent, 'utf8');
+      console.log(`\n✨ Success! Documentation generated at:`);
+      console.log(`   ${outputPath}\n`);
+    } catch (writeError) {
+      if (writeError.code === 'EACCES') {
+        console.error('❌ Permission denied: Cannot write to the current directory');
+      } else if (writeError.code === 'ENOSPC') {
+        console.error('❌ No space left on device: Cannot write file');
+      } else if (writeError.code === 'EROFS') {
+        console.error('❌ Read-only file system: Cannot write file');
+      } else {
+        console.error('❌ Error writing file:', writeError.message);
+      }
+      process.exit(1);
+    }
 
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    console.error('❌ Unexpected error:', error.message);
+    if (error.stack) {
+      console.error('\nStack trace:');
+      console.error(error.stack);
+    }
     process.exit(1);
   }
 }
