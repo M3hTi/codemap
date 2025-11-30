@@ -41,6 +41,21 @@ function getFileExtension(format) {
 }
 
 /**
+ * Log function that respects output format
+ * For JSON/HTML output, always use stderr to allow clean stdout redirection
+ * @param {string} message - Message to log
+ * @param {Object} options - Options object
+ */
+function log(message, options) {
+  // Always use stderr for JSON/HTML to allow clean stdout redirection
+  if (options.format === 'json' || options.format === 'html') {
+    console.error(message);
+  } else {
+    console.log(message);
+  }
+}
+
+/**
  * Main CLI function
  */
 async function main() {
@@ -54,8 +69,6 @@ async function main() {
       process.exit(0);
     }
 
-    console.log('🗺️  CodeMap - Scanning your project...\n');
-
     const currentDir = process.cwd();
 
     // Load configuration file
@@ -64,25 +77,27 @@ async function main() {
     // Merge configurations (CLI takes precedence)
     const options = fileConfig ? mergeConfigs(fileConfig, cliOptions) : cliOptions;
 
+    log('🗺️  CodeMap - Scanning your project...\n', options);
+
     const isRoot = isProjectRoot(currentDir);
 
-    console.log(`📂 Working directory: ${currentDir}`);
-    console.log(`📍 Project root detected: ${isRoot ? 'Yes' : 'No'}`);
+    log(`📂 Working directory: ${currentDir}`, options);
+    log(`📍 Project root detected: ${isRoot ? 'Yes' : 'No'}`, options);
 
     // Show active options
     if (options.filter) {
-      console.log(`🔍 Filtering: ${options.filter.join(', ')}`);
+      log(`🔍 Filtering: ${options.filter.join(', ')}`, options);
     }
     if (options.exclude) {
-      console.log(`🚫 Excluding: ${options.exclude.join(', ')}`);
+      log(`🚫 Excluding: ${options.exclude.join(', ')}`, options);
     }
     if (options.format !== 'markdown') {
-      console.log(`📄 Format: ${options.format}`);
+      log(`📄 Format: ${options.format}`, options);
     }
-    console.log('');
+    log('', options);
 
     // Scan the directory for code files
-    console.log('🔍 Scanning files...');
+    log('🔍 Scanning files...', options);
     const scannedFiles = scanDirectory(currentDir, {
       maxSize: options.maxSize,
       filter: options.filter,
@@ -92,15 +107,15 @@ async function main() {
     });
 
     if (scannedFiles.length === 0) {
-      console.log('⚠️  No code files found in the current directory.');
+      log('⚠️  No code files found in the current directory.', options);
       process.exit(0);
     }
 
-    console.log(`✅ Found ${scannedFiles.length} code file(s)\n`);
+    log(`✅ Found ${scannedFiles.length} code file(s)\n`, options);
 
     // Process file contents (redaction, truncation)
     if (options.redact || options.truncate) {
-      console.log('🔒 Processing file contents...');
+      log('🔒 Processing file contents...', options);
       scannedFiles.forEach(file => {
         const processed = processContent(file.content, {
           redact: options.redact,
@@ -116,7 +131,7 @@ async function main() {
     // Get git information
     let gitInfo = null;
     if (options.git) {
-      console.log('📜 Fetching git information...');
+      log('📜 Fetching git information...', options);
       gitInfo = getGitInfo(currentDir);
 
       // Get per-file git info
@@ -130,16 +145,16 @@ async function main() {
     // Calculate statistics
     let statistics = null;
     if (options.stats) {
-      console.log('📊 Calculating statistics...');
+      log('📊 Calculating statistics...', options);
       statistics = calculateStatistics(scannedFiles);
     }
 
     // Build project tree from current directory
-    console.log('🌳 Building project tree...');
+    log('🌳 Building project tree...', options);
     const projectTree = buildTree(currentDir, scannedFiles);
 
     // Generate content based on format
-    console.log('📝 Generating documentation...');
+    log('📝 Generating documentation...', options);
 
     let outputContent;
     let outputExt = getFileExtension(options.format);
@@ -168,55 +183,80 @@ async function main() {
         break;
     }
 
-    // Determine output path
-    let outputPath = options.output;
+    // Determine if we should output to stdout or file
+    const useStdout = (options.format === 'json' || options.format === 'html') && options.output === 'CODEMAP.md';
 
-    // If output doesn't have an extension, add the appropriate one
-    if (!path.extname(outputPath)) {
-      outputPath = outputPath.replace(/\.[^.]+$/, '') + outputExt;
-    } else if (path.extname(outputPath) !== outputExt) {
-      // If extension doesn't match format, replace it
-      outputPath = outputPath.replace(/\.[^.]+$/, outputExt);
-    }
+    if (useStdout) {
+      // Output to stdout for piping/redirection
+      console.log(outputContent);
 
-    // Make output path absolute if it's relative
-    if (!path.isAbsolute(outputPath)) {
-      outputPath = path.join(currentDir, outputPath);
-    }
-
-    // Write output file
-    try {
-      fs.writeFileSync(outputPath, outputContent, 'utf8');
-      console.log(`\n✨ Success! Documentation generated at:`);
-      console.log(`   ${outputPath}`);
-
-      // Show summary
-      console.log(`\n📋 Summary:`);
-      console.log(`   - Files: ${scannedFiles.length}`);
+      // Show summary to stderr
+      log(`\n📋 Summary:`, options);
+      log(`   - Files: ${scannedFiles.length}`, options);
       if (statistics) {
-        console.log(`   - Lines: ${statistics.totalLines.toLocaleString()}`);
-        console.log(`   - Size: ${formatFileSize(statistics.totalSize)}`);
-        console.log(`   - Languages: ${Object.keys(statistics.byLanguage).length}`);
+        log(`   - Lines: ${statistics.totalLines.toLocaleString()}`, options);
+        log(`   - Size: ${formatFileSize(statistics.totalSize)}`, options);
+        log(`   - Languages: ${Object.keys(statistics.byLanguage).length}`, options);
       }
       if (options.redact) {
-        console.log(`   - Redacted: ✓`);
+        log(`   - Redacted: ✓`, options);
       }
       if (options.truncate) {
-        console.log(`   - Truncated: ✓`);
+        log(`   - Truncated: ✓`, options);
       }
-      console.log('');
+      log('', options);
 
-    } catch (writeError) {
-      if (writeError.code === 'EACCES') {
-        console.error('❌ Permission denied: Cannot write to the current directory');
-      } else if (writeError.code === 'ENOSPC') {
-        console.error('❌ No space left on device: Cannot write file');
-      } else if (writeError.code === 'EROFS') {
-        console.error('❌ Read-only file system: Cannot write file');
-      } else {
-        console.error('❌ Error writing file:', writeError.message);
+    } else {
+      // Write to file
+      let outputPath = options.output;
+
+      // If output doesn't have an extension, add the appropriate one
+      if (!path.extname(outputPath)) {
+        outputPath = outputPath.replace(/\.[^.]+$/, '') + outputExt;
+      } else if (path.extname(outputPath) !== outputExt) {
+        // If extension doesn't match format, replace it
+        outputPath = outputPath.replace(/\.[^.]+$/, outputExt);
       }
-      process.exit(1);
+
+      // Make output path absolute if it's relative
+      if (!path.isAbsolute(outputPath)) {
+        outputPath = path.join(currentDir, outputPath);
+      }
+
+      // Write output file
+      try {
+        fs.writeFileSync(outputPath, outputContent, 'utf8');
+        log(`\n✨ Success! Documentation generated at:`, options);
+        log(`   ${outputPath}`, options);
+
+        // Show summary
+        log(`\n📋 Summary:`, options);
+        log(`   - Files: ${scannedFiles.length}`, options);
+        if (statistics) {
+          log(`   - Lines: ${statistics.totalLines.toLocaleString()}`, options);
+          log(`   - Size: ${formatFileSize(statistics.totalSize)}`, options);
+          log(`   - Languages: ${Object.keys(statistics.byLanguage).length}`, options);
+        }
+        if (options.redact) {
+          log(`   - Redacted: ✓`, options);
+        }
+        if (options.truncate) {
+          log(`   - Truncated: ✓`, options);
+        }
+        log('', options);
+
+      } catch (writeError) {
+        if (writeError.code === 'EACCES') {
+          console.error('❌ Permission denied: Cannot write to the current directory');
+        } else if (writeError.code === 'ENOSPC') {
+          console.error('❌ No space left on device: Cannot write file');
+        } else if (writeError.code === 'EROFS') {
+          console.error('❌ Read-only file system: Cannot write file');
+        } else {
+          console.error('❌ Error writing file:', writeError.message);
+        }
+        process.exit(1);
+      }
     }
 
   } catch (error) {
