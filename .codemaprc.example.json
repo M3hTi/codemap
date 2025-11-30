@@ -1,0 +1,15 @@
+{
+  "output": "CODEMAP.md",
+  "format": "markdown",
+  "maxFileSize": "1MB",
+  "filter": null,
+  "exclude": ["*.test.js", "*.spec.js"],
+  "ignoreDirs": ["temp", "cache"],
+  "noContent": false,
+  "depth": null,
+  "stats": true,
+  "truncate": false,
+  "truncateLines": 100,
+  "redact": false,
+  "git": true
+}
