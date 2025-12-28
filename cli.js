@@ -11,6 +11,9 @@ const { calculateStatistics } = require('./lib/statistics');
 const { getGitInfo, getFileGitInfo } = require('./lib/git-integration');
 const { processContent } = require('./lib/content-processor');
 const { formatAsJSON, formatAsHTML } = require('./lib/output-formatter');
+const { createSpinner, createProgressBar } = require('./lib/progress');
+const { runInteractiveMode } = require('./lib/interactive');
+const { startWatcher, logWatchEvent } = require('./lib/watcher');
 
 /**
  * Check if the current directory is a project root
@@ -56,48 +59,49 @@ function log(message, options) {
 }
 
 /**
- * Main CLI function
+ * Format file size
+ * @param {number} bytes - File size in bytes
+ * @returns {string} Formatted size
  */
-async function main() {
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+}
+
+/**
+ * Generate documentation for a project
+ * @param {string} currentDir - Directory to scan
+ * @param {Object} options - Configuration options
+ * @param {boolean} isWatchMode - Whether running in watch mode
+ * @returns {Promise<boolean>} Success status
+ */
+async function generateDocumentation(currentDir, options, isWatchMode = false) {
   try {
-    // Parse CLI arguments
-    const cliOptions = parseArgs();
-
-    // Show help if requested
-    if (cliOptions.help) {
-      displayHelp();
-      process.exit(0);
-    }
-
-    const currentDir = process.cwd();
-
-    // Load configuration file
-    const fileConfig = loadConfig(currentDir);
-
-    // Merge configurations (CLI takes precedence)
-    const options = fileConfig ? mergeConfigs(fileConfig, cliOptions) : cliOptions;
-
-    log('🗺️  CodeMap - Scanning your project...\n', options);
-
     const isRoot = isProjectRoot(currentDir);
 
-    log(`📂 Working directory: ${currentDir}`, options);
-    log(`📍 Project root detected: ${isRoot ? 'Yes' : 'No'}`, options);
+    if (!isWatchMode) {
+      log('🗺️  CodeMap - Scanning your project...\n', options);
+      log(`📂 Working directory: ${currentDir}`, options);
+      log(`📍 Project root detected: ${isRoot ? 'Yes' : 'No'}`, options);
 
-    // Show active options
-    if (options.filter) {
-      log(`🔍 Filtering: ${options.filter.join(', ')}`, options);
+      // Show active options
+      if (options.filter) {
+        log(`🔍 Filtering: ${options.filter.join(', ')}`, options);
+      }
+      if (options.exclude) {
+        log(`🚫 Excluding: ${options.exclude.join(', ')}`, options);
+      }
+      if (options.format !== 'markdown') {
+        log(`📄 Format: ${options.format}`, options);
+      }
+      log('', options);
     }
-    if (options.exclude) {
-      log(`🚫 Excluding: ${options.exclude.join(', ')}`, options);
-    }
-    if (options.format !== 'markdown') {
-      log(`📄 Format: ${options.format}`, options);
-    }
-    log('', options);
 
-    // Scan the directory for code files
-    log('🔍 Scanning files...', options);
+    // Scan the directory for code files with progress indicator
+    const scanSpinner = createSpinner('Scanning files');
+    scanSpinner.start();
+
     const scannedFiles = scanDirectory(currentDir, {
       maxSize: options.maxSize,
       filter: options.filter,
@@ -107,16 +111,21 @@ async function main() {
     });
 
     if (scannedFiles.length === 0) {
-      log('⚠️  No code files found in the current directory.', options);
-      process.exit(0);
+      scanSpinner.fail('No code files found');
+      if (!isWatchMode) {
+        log('⚠️  No code files found in the current directory.', options);
+      }
+      return false;
     }
 
-    log(`✅ Found ${scannedFiles.length} code file(s)\n`, options);
+    scanSpinner.succeed(`Found ${scannedFiles.length} code file(s)`);
 
-    // Process file contents (redaction, truncation)
+    // Process file contents (redaction, truncation) with progress
     if (options.redact || options.truncate) {
-      log('🔒 Processing file contents...', options);
-      scannedFiles.forEach(file => {
+      const processProgress = createProgressBar(scannedFiles.length, 'Processing files');
+      processProgress.start();
+
+      scannedFiles.forEach((file, index) => {
         const processed = processContent(file.content, {
           redact: options.redact,
           truncate: options.truncate,
@@ -125,36 +134,54 @@ async function main() {
 
         file.content = processed.content;
         file.processed = processed.metadata;
+        processProgress.update(index + 1);
       });
+
+      processProgress.succeed('Files processed');
     }
 
     // Get git information
     let gitInfo = null;
     if (options.git) {
-      log('📜 Fetching git information...', options);
+      const gitSpinner = createSpinner('Fetching git information');
+      gitSpinner.start();
+
       gitInfo = getGitInfo(currentDir);
 
-      // Get per-file git info
+      // Get per-file git info with progress
       if (gitInfo) {
-        scannedFiles.forEach(file => {
+        const gitProgress = createProgressBar(scannedFiles.length, 'Getting file history');
+        gitProgress.start();
+
+        scannedFiles.forEach((file, index) => {
           file.gitInfo = getFileGitInfo(file.path, currentDir);
+          gitProgress.update(index + 1);
         });
+
+        gitProgress.succeed('Git information collected');
+      } else {
+        gitSpinner.stop();
       }
     }
 
     // Calculate statistics
     let statistics = null;
     if (options.stats) {
-      log('📊 Calculating statistics...', options);
+      const statsSpinner = createSpinner('Calculating statistics');
+      statsSpinner.start();
       statistics = calculateStatistics(scannedFiles);
+      statsSpinner.succeed('Statistics calculated');
     }
 
     // Build project tree from current directory
-    log('🌳 Building project tree...', options);
+    const treeSpinner = createSpinner('Building project tree');
+    treeSpinner.start();
     const projectTree = buildTree(currentDir, scannedFiles);
+    treeSpinner.succeed('Project tree built');
 
     // Generate content based on format
-    log('📝 Generating documentation...', options);
+    const genSpinner = createSpinner('Generating documentation');
+    genSpinner.start();
 
     let outputContent;
     let outputExt = getFileExtension(options.format);
@@ -182,6 +209,8 @@ async function main() {
         outputContent = generateMarkdown(data);
         break;
     }
+
+    genSpinner.succeed('Documentation generated');
 
     // Determine if we should output to stdout or file
     const useStdout = (options.format === 'json' || options.format === 'html') && options.output === 'CODEMAP.md';
@@ -226,24 +255,29 @@ async function main() {
       // Write output file
       try {
         fs.writeFileSync(outputPath, outputContent, 'utf8');
-        log(`\n✨ Success! Documentation generated at:`, options);
-        log(`   ${outputPath}`, options);
 
-        // Show summary
-        log(`\n📋 Summary:`, options);
-        log(`   - Files: ${scannedFiles.length}`, options);
-        if (statistics) {
-          log(`   - Lines: ${statistics.totalLines.toLocaleString()}`, options);
-          log(`   - Size: ${formatFileSize(statistics.totalSize)}`, options);
-          log(`   - Languages: ${Object.keys(statistics.byLanguage).length}`, options);
+        if (isWatchMode) {
+          logWatchEvent(`Updated ${path.basename(outputPath)}`, 'success');
+        } else {
+          log(`\n✨ Success! Documentation generated at:`, options);
+          log(`   ${outputPath}`, options);
+
+          // Show summary
+          log(`\n📋 Summary:`, options);
+          log(`   - Files: ${scannedFiles.length}`, options);
+          if (statistics) {
+            log(`   - Lines: ${statistics.totalLines.toLocaleString()}`, options);
+            log(`   - Size: ${formatFileSize(statistics.totalSize)}`, options);
+            log(`   - Languages: ${Object.keys(statistics.byLanguage).length}`, options);
+          }
+          if (options.redact) {
+            log(`   - Redacted: ✓`, options);
+          }
+          if (options.truncate) {
+            log(`   - Truncated: ✓`, options);
+          }
+          log('', options);
         }
-        if (options.redact) {
-          log(`   - Redacted: ✓`, options);
-        }
-        if (options.truncate) {
-          log(`   - Truncated: ✓`, options);
-        }
-        log('', options);
 
       } catch (writeError) {
         if (writeError.code === 'EACCES') {
@@ -255,6 +289,80 @@ async function main() {
         } else {
           console.error('❌ Error writing file:', writeError.message);
         }
+        return false;
+      }
+    }
+
+    return true;
+
+  } catch (error) {
+    console.error('❌ Unexpected error:', error.message);
+    if (error.stack) {
+      console.error('\nStack trace:');
+      console.error(error.stack);
+    }
+    return false;
+  }
+}
+
+/**
+ * Main CLI function
+ */
+async function main() {
+  try {
+    // Parse CLI arguments
+    let cliOptions = parseArgs();
+
+    // Show help if requested
+    if (cliOptions.help) {
+      displayHelp();
+      process.exit(0);
+    }
+
+    const currentDir = process.cwd();
+
+    // Load configuration file
+    const fileConfig = loadConfig(currentDir);
+
+    // Merge configurations (CLI takes precedence)
+    let options = fileConfig ? mergeConfigs(fileConfig, cliOptions) : cliOptions;
+
+    // Run interactive mode if requested
+    if (options.interactive) {
+      options = await runInteractiveMode();
+      // Preserve watch mode if set via CLI
+      options.watch = cliOptions.watch;
+    }
+
+    // Watch mode
+    if (options.watch) {
+      // Initial generation
+      const success = await generateDocumentation(currentDir, options, false);
+
+      if (!success) {
+        process.exit(1);
+      }
+
+      // Start watching
+      const watcher = startWatcher(currentDir, async (changedFiles) => {
+        logWatchEvent(`${changedFiles.length} file(s) changed`, 'change');
+        await generateDocumentation(currentDir, options, true);
+      }, {
+        ignoreDirs: options.ignoreDirs,
+        filter: options.filter,
+        debounceMs: 500
+      });
+
+      watcher.start();
+
+      // Keep the process running
+      process.stdin.resume();
+
+    } else {
+      // Single generation
+      const success = await generateDocumentation(currentDir, options, false);
+
+      if (!success) {
         process.exit(1);
       }
     }
@@ -267,17 +375,6 @@ async function main() {
     }
     process.exit(1);
   }
-}
-
-/**
- * Format file size
- * @param {number} bytes - File size in bytes
- * @returns {string} Formatted size
- */
-function formatFileSize(bytes) {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
-  return (bytes / 1024 / 1024).toFixed(2) + ' MB';
 }
 
 // Run the CLI

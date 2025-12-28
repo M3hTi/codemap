@@ -14,6 +14,9 @@ A powerful CLI tool that scans your project directory and generates comprehensiv
 - **Flexible Configuration** - CLI arguments and config file support
 
 ### Advanced Features
+- **Interactive Mode** - Guided configuration wizard for easy setup
+- **Watch Mode** - Auto-regenerate documentation on file changes
+- **Progress Indicators** - Visual feedback with spinners and progress bars
 - **Statistics Dashboard** with language distribution charts and file metrics
 - **Git Information** including last modified dates, authors, and commit counts
 - **Content Redaction** to automatically detect and hide API keys, tokens, and secrets
@@ -70,6 +73,8 @@ OPTIONS:
   --redact                   Redact sensitive information (API keys, tokens, etc.)
   --no-stats                 Skip statistics dashboard
   --no-git                   Skip git integration features
+  -i, --interactive          Run interactive configuration wizard
+  -w, --watch                Watch for file changes and regenerate automatically
   -h, --help                 Show help message
 ```
 
@@ -78,6 +83,15 @@ OPTIONS:
 ```bash
 # Generate with defaults
 codemap
+
+# Interactive configuration wizard
+codemap --interactive
+
+# Watch mode - auto-regenerate on file changes
+codemap --watch
+
+# Combine interactive setup with watch mode
+codemap -i -w
 
 # Custom output location
 codemap --output docs/CODE.md
@@ -108,6 +122,50 @@ codemap --depth 3
 
 # Combine multiple options
 codemap --filter .js,.ts --format json --redact --truncate
+```
+
+## 🧙 Interactive Mode
+
+Run the interactive configuration wizard to set up your preferences step by step:
+
+```bash
+codemap --interactive
+# or
+codemap -i
+```
+
+The wizard guides you through:
+- Output format selection (Markdown, JSON, HTML)
+- Output file path
+- File type filtering
+- Exclusion patterns
+- Maximum file size
+- Directory depth limits
+- Content truncation settings
+- Sensitive data redaction
+- Statistics and git integration options
+
+A summary is shown before proceeding, allowing you to confirm or cancel.
+
+## 👁️ Watch Mode
+
+Enable watch mode to automatically regenerate documentation when files change:
+
+```bash
+codemap --watch
+# or
+codemap -w
+```
+
+Features:
+- Monitors all project directories for changes
+- Debounces rapid changes (500ms) to avoid excessive regeneration
+- Shows timestamped logs of detected changes
+- Press `Ctrl+C` to stop watching
+
+Combine with interactive mode for initial setup:
+```bash
+codemap -i -w
 ```
 
 ## ⚙️ Configuration File
@@ -354,7 +412,18 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 
 ## 📝 Changelog
 
-### Version 1.1.0 (Latest)
+### Version 1.2.0 (Latest)
+
+**New Features:**
+- 🧙 Interactive mode (`-i, --interactive`) - Guided configuration wizard
+- 👁️ Watch mode (`-w, --watch`) - Auto-regenerate on file changes
+- 🔄 Progress indicators - Animated spinners and progress bars for visual feedback
+
+**Improvements:**
+- Cleaner console output during scanning
+- Better user experience with real-time progress updates
+
+### Version 1.1.0
 
 **New Features:**
 - ✨ CLI argument parsing with extensive options
