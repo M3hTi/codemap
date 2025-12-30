@@ -150,6 +150,8 @@ async function generateDocumentation(currentDir, options, isWatchMode = false) {
 
       // Get per-file git info with progress
       if (gitInfo) {
+        gitSpinner.succeed('Git repository detected');
+
         const gitProgress = createProgressBar(scannedFiles.length, 'Getting file history');
         gitProgress.start();
 
@@ -160,7 +162,7 @@ async function generateDocumentation(currentDir, options, isWatchMode = false) {
 
         gitProgress.succeed('Git information collected');
       } else {
-        gitSpinner.stop();
+        gitSpinner.stop('No git repository found');
       }
     }
 
